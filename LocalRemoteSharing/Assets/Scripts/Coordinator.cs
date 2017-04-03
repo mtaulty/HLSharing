@@ -166,8 +166,6 @@ public class Coordinator : MonoBehaviour
   {
     if (this.wifiName == null)
     {
-      var name = string.Empty;
-
 #if UNITY_UWP && !UNITY_EDITOR
       var interfaces = NetworkInformation.GetConnectionProfiles();
 
@@ -175,7 +173,14 @@ public class Coordinator : MonoBehaviour
         i => (i.GetNetworkConnectivityLevel() != NetworkConnectivityLevel.None) &&
              (i.IsWlanConnectionProfile)).FirstOrDefault();
 
-      this.wifiName = wifi.WlanConnectionProfileDetails.GetConnectedSsid();
+      if (wifi != null)
+      {
+        this.wifiName = wifi.WlanConnectionProfileDetails.GetConnectedSsid();
+      }
+      else
+      {
+        this.wifiName = DEFAULT_WIFI_NAME;
+      }
 #endif
     }
   }
@@ -188,5 +193,6 @@ public class Coordinator : MonoBehaviour
   Room currentRoom;
   CurrentStatus currentStatus;
   DateTime roomApiStartTime;
+  static readonly string DEFAULT_WIFI_NAME = "DefaultWifi";
   static readonly TimeSpan ROOM_API_STABILISATION_TIME = TimeSpan.FromSeconds(3);
 }

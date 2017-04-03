@@ -21,10 +21,14 @@ namespace HoloToolkit.Sharing.Tests
     {
       public long UserID;
       public GameObject HeadObject;
+#if MIKET_CHANGE
+      public GameObject BodyObject;
+#endif     
     }
 
 #if MIKET_CHANGE
     public GameObject remoteHeadPrefab;
+    public GameObject remoteBodyPrefab;
 #endif
 
     /// <summary>
@@ -35,7 +39,10 @@ namespace HoloToolkit.Sharing.Tests
 #if MIKET_CHANGE
     private void OnEnable()
     {
-      CustomMessages.Instance.MessageHandlers[CustomMessages.TestMessageID.HeadTransform] = UpdateHeadTransform;
+      this.roomId = -1;
+
+      CustomMessages.Instance.MessageHandlers[CustomMessages.TestMessageID.HeadTransform] =
+        UpdateHeadTransform;
 
       SharingStage.Instance.SessionUsersTracker.UserJoined += UserJoinedSession;
       SharingStage.Instance.SessionUsersTracker.UserLeft += UserLeftSession;
@@ -66,6 +73,9 @@ namespace HoloToolkit.Sharing.Tests
 
     private void Update()
     {
+#if MIKET_CHANGE
+      this.DetermineCurrentRoom();
+#endif
       // Grab the current head transform and broadcast it to all the other users in the session
       Transform headTransform = Camera.main.transform;
 
@@ -74,8 +84,26 @@ namespace HoloToolkit.Sharing.Tests
 
       Quaternion headRotation = Quaternion.Inverse(transform.rotation) * headTransform.rotation;
 
-      CustomMessages.Instance.SendHeadTransform(headPosition, headRotation);
+#if MIKET_CHANGE
+      CustomMessages.Instance.SendHeadTransform(headPosition, headRotation,
+         this.roomId);
+#endif
     }
+#if MIKET_CHANGE
+    void DetermineCurrentRoom()
+    {
+      if (this.roomId == -1)
+      {
+        var roomManager = SharingStage.Instance.Manager.GetRoomManager();
+
+        if (roomManager != null)
+        {
+          var room = roomManager.GetCurrentRoom();
+          this.roomId = room.GetID();
+        }
+      }
+    }
+#endif
 
     protected override void OnDestroy()
     {
@@ -133,6 +161,10 @@ namespace HoloToolkit.Sharing.Tests
         headInfo.UserID = userId;
         headInfo.HeadObject = CreateRemoteHead();
 
+#if MIKET_CHANGE
+        headInfo.BodyObject = Instantiate(this.remoteBodyPrefab);
+        headInfo.BodyObject.transform.parent = this.gameObject.transform;
+#endif
         remoteHeads.Add(userId, headInfo);
       }
 
@@ -152,6 +184,10 @@ namespace HoloToolkit.Sharing.Tests
 
       Quaternion headRot = CustomMessages.Instance.ReadQuaternion(msg);
 
+#if MIKET_CHANGE
+      long remoteRoomId = msg.ReadInt64();
+#endif
+
       RemoteHeadInfo headInfo = GetRemoteHeadInfo(userID);
       headInfo.HeadObject.transform.localPosition = headPos;
       headInfo.HeadObject.transform.localRotation = headRot;
@@ -170,6 +206,18 @@ namespace HoloToolkit.Sharing.Tests
       }
       var lineRenderer = headInfo.HeadObject.GetComponent<LineRenderer>();
       lineRenderer.SetPosition(1, Vector3.forward * rayLength);
+
+      if ((remoteRoomId == -1) || (this.roomId == -1) ||
+        (remoteRoomId != this.roomId))
+      {
+        headInfo.BodyObject.SetActive(true);
+        headInfo.BodyObject.transform.localPosition = headPos;
+        headInfo.BodyObject.transform.localRotation = headRot;
+      }
+      else
+      {
+        headInfo.BodyObject.SetActive(false);
+      }
 #endif
     }
 
@@ -213,6 +261,7 @@ namespace HoloToolkit.Sharing.Tests
       DestroyImmediate(remoteHeadObject);
     }
 #if MIKET_CHANGE
+    long roomId;
     const float maxRayDistance = 5.0f;
     int colorIndex;
     static Color[] colors =
