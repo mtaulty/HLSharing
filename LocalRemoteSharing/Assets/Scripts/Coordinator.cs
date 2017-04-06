@@ -5,6 +5,8 @@ using System.Linq;
 using UnityEngine;
 using System;
 using HoloToolkit.Sharing.Tests;
+using HoloToolkit.Sharing.Spawning;
+using HoloToolkit.Unity;
 
 #if UNITY_UWP && !UNITY_EDITOR
 using Windows.Networking.Connectivity;
@@ -16,6 +18,8 @@ public class Coordinator : MonoBehaviour
 
   enum CurrentStatus
   {
+    Start,
+    WaitingForModelToLoad,
     WaitingToConnectToStage,
     WaitingForRoomApiToStabilise,
     WaitingForModelPositioning,
@@ -24,41 +28,77 @@ public class Coordinator : MonoBehaviour
   }
   void Start()
   {
-    StatusTextDisplay.Instance.SetStatusText("connecting network");
-
-    this.modelParent.SetActive(false);
+    StatusTextDisplay.Instance.SetStatusText("waiting for model to load");
   }
   void Update()
   {
-    if (SharingStage.Instance.IsConnected)
+    switch (this.currentStatus)
     {
-      switch (this.currentStatus)
-      {
-        case CurrentStatus.WaitingToConnectToStage:
+      case CurrentStatus.Start:
+        this.MoveToStatus(CurrentStatus.WaitingForModelToLoad);
 
+        Debug.Log("Coordinator: starting to load model from web server");
+        StatusTextDisplay.Instance.SetStatusText("loading model from web server");
+
+        this.GetComponent<BundleDownloader>().Downloaded += this.OnModelDownloaded;
+        this.GetComponent<BundleDownloader>().StartAsyncDownload();
+        break;
+      case CurrentStatus.WaitingToConnectToStage:
+
+        if (SharingStage.Instance.IsConnected)
+        {
           Debug.Log("Coordinator: moving to connection stage");
           StatusTextDisplay.Instance.SetStatusText("network connected");
 
           this.GetWiFiNetworkName();
           this.roomApiStartTime = DateTime.Now;
-          this.currentStatus = CurrentStatus.WaitingForRoomApiToStabilise;
-          break;
-        case CurrentStatus.WaitingForRoomApiToStabilise:
+          this.MoveToStatus(CurrentStatus.WaitingForRoomApiToStabilise);
+        }
+        break;
+      case CurrentStatus.WaitingForRoomApiToStabilise:
 
-          // Note - with a room created, I find that the room API can return 0 rooms
-          // and yet call it just one frame later and it changes it mind. Hence...
-          // here we give it a little time.
-          var doneWaitingForRoomApi = this.WaitForRoomCountToStabilise(ROOM_API_STABILISATION_TIME);
+        // Note - with a room created, I find that the room API can return 0 rooms
+        // and yet call it just one frame later and it changes it mind. Hence...
+        // here we give it a little time.
+        var doneWaitingForRoomApi = this.WaitForRoomCountToStabilise(ROOM_API_STABILISATION_TIME);
 
-          if (doneWaitingForRoomApi)
-          {
-            this.CreateOrJoinRoomBasedonWifiNetworkName();
-          }
-          break;
-        default:
-          break;
-      }
+        if (doneWaitingForRoomApi)
+        {
+          this.CreateOrJoinRoomBasedonWifiNetworkName();
+        }
+        break;
+      default:
+        break;
     }
+  }
+  void OnModelDownloaded(object sender, BundleDownloadedEventArgs e)
+  {
+    var bundleDownloader = this.GetComponent<BundleDownloader>();
+
+    bundleDownloader.Downloaded -= this.OnModelDownloaded;
+
+    Debug.Log(
+      string.Format(
+        "Coordinator: download of model from web server has completed and {0}",
+        e.DownloadSucceeded ? "succeeded" : "failed or wasn't tried"));
+
+    StatusTextDisplay.Instance.SetStatusText(
+      string.Format(
+        "{0} model from web server",
+        e.DownloadSucceeded ? "loaded" : "failed to load"));
+
+    // Create the model and parent it off this object.
+    this.model = Instantiate(bundleDownloader.LoadedPrefab);
+    this.model.transform.parent = this.modelParent.transform;
+
+    Debug.Log(
+      string.Format(
+        "Coordinator: waiting for network connection",
+        e.DownloadSucceeded ? "succeeded" : "failed or wasn't tried"));
+
+    StatusTextDisplay.Instance.SetStatusText("connecting to room server");
+
+    this.MoveToStatus(CurrentStatus.WaitingToConnectToStage);
   }
   bool WaitForRoomCountToStabilise(TimeSpan timeSpan)
   {
@@ -116,7 +156,7 @@ public class Coordinator : MonoBehaviour
       StatusTextDisplay.Instance.SetStatusText("waiting for user to position model");
 
       Debug.Log("Coordinator: waiting for user to position model");
-      this.modelParent.GetComponent<UserMoveable>().Locked += OnPositionLocked;    
+      this.modelParent.GetComponent<UserMoveable>().Locked += OnPositionLocked;
     }
     else
     {
@@ -151,14 +191,20 @@ public class Coordinator : MonoBehaviour
   {
     StatusTextDisplay.Instance.SetStatusText("room in sync");
 
-    if (this.currentStatus == CurrentStatus.WaitingForWorldAnchorImport)
-    {
-      // TBD: we're done importing the world anchor.
-    }
-    else
-    {
-      // TBD: we're done exporting the world anchor.
-    }
+    // Allow the child to be moved now that it is positioned in
+    // the right place.
+    this.model.AddComponent<UserMoveable>();
+
+    var dataModel = SharingStage.Instance.Root.ModelObject;
+    dataModel.GameObject = this.model.gameObject;
+    dataModel.Initialize(this.model.gameObject.name, this.model.transform.GetFullPath());
+    dataModel.Transform.Position.Value = this.model.transform.localPosition;
+    dataModel.Transform.Rotation.Value = this.model.transform.localRotation;
+    dataModel.Transform.Scale.Value = this.model.transform.localScale;
+
+    var synchronizer = this.model.EnsureComponent<TransformSynchronizer>();
+    synchronizer.TransformDataModel = dataModel.Transform;
+
     // Switch on the remote head management.
     this.modelParent.GetComponent<RemoteHeadManager>().enabled = true;
   }
@@ -189,6 +235,7 @@ public class Coordinator : MonoBehaviour
     // This is here to add logging etc. at a later point...
     this.currentStatus = newStatus;
   }
+  GameObject model;
   string wifiName;
   Room currentRoom;
   CurrentStatus currentStatus;

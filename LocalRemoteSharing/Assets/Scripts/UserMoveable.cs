@@ -9,6 +9,9 @@ public class UserMoveable : MonoBehaviour, IManipulationHandler, IInputClickHand
   [SerializeField]
   TextToSpeechManager textToSpeechManager;
 
+  [SerializeField]
+  bool isResponsibleForLocking;
+
   public event EventHandler Locked;
 
   enum Rail
@@ -18,14 +21,16 @@ public class UserMoveable : MonoBehaviour, IManipulationHandler, IInputClickHand
   }
   private void OnEnable()
   {
-    this.textToSpeechManager.SpeakText(
-      "Tap to toggle the model following you and drag to raise or rotate. Say lock when done");
+    if (this.isResponsibleForLocking)
+    {
+      this.textToSpeechManager.SpeakText(
+        "Tap to toggle the model following you and drag to raise or rotate. Say lock when done");
+    }
   }
   public void OnLock()
   {
     // We're done.
     this.gameObject.GetComponent<KeywordManager>().StopKeywordRecognizer();
-    this.enabled = false;
 
     if (this.Locked != null)
     {
@@ -38,38 +43,44 @@ public class UserMoveable : MonoBehaviour, IManipulationHandler, IInputClickHand
   }
   public void OnManipulationStarted(ManipulationEventData eventData)
   {
-    this.lastDelta = eventData.CumulativeDelta;
+    if (!this.isLockedToGaze)
+    {
+      this.lastDelta = eventData.CumulativeDelta;
+    }
   }
   public void OnManipulationUpdated(ManipulationEventData eventData)
   {
-    if (this.rail == null)
+    if (!this.isLockedToGaze)
     {
-      if (Math.Abs(eventData.CumulativeDelta.x) > Math.Abs(eventData.CumulativeDelta.y))
+      if (this.rail == null)
       {
-        this.rail = Rail.X;
+        if (Math.Abs(eventData.CumulativeDelta.x) > Math.Abs(eventData.CumulativeDelta.y))
+        {
+          this.rail = Rail.X;
+        }
+        else
+        {
+          this.rail = Rail.Y;
+        }
       }
-      else
+      // Strangely, this can happen
+      if (this.lastDelta.HasValue)
       {
-        this.rail = Rail.Y;
-      }
-    }
-    // Strangely, this can happen
-    if (this.lastDelta.HasValue)
-    {
-      var delta = eventData.CumulativeDelta - this.lastDelta.Value;
+        var delta = eventData.CumulativeDelta - this.lastDelta.Value;
 
-      var xDelta = (0 - delta.x) * HORIZONTAL_FACTOR;
+        var xDelta = (0 - delta.x) * HORIZONTAL_FACTOR;
 
-      if (this.rail == Rail.X)
-      {
-        this.gameObject.transform.Rotate(0, xDelta, 0, Space.Self);
+        if (this.rail == Rail.X)
+        {
+          this.gameObject.transform.Rotate(0, xDelta, 0, Space.Self);
+        }
+        else
+        {
+          this.gameObject.transform.Translate(0, delta.y * VERTICAL_FACTOR, 0, Space.World);
+        }
       }
-      else
-      {
-        this.gameObject.transform.Translate(0, delta.y * VERTICAL_FACTOR, 0, Space.World);
-      }
+      this.lastDelta = eventData.CumulativeDelta;
     }
-    this.lastDelta = eventData.CumulativeDelta;
   }
   public void OnManipulationCompleted(ManipulationEventData eventData)
   {
@@ -111,7 +122,7 @@ public class UserMoveable : MonoBehaviour, IManipulationHandler, IInputClickHand
         gazePosition.x - this.gameObject.transform.position.x - this.centreOffset.x,
         0,
         gazePosition.z - this.gameObject.transform.position.z - this.centreOffset.z,
-        Space.Self);
+        Space.World);
     }
   }
   bool isLockedToGaze;

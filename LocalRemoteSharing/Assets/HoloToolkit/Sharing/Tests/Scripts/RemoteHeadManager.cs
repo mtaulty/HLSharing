@@ -242,7 +242,7 @@ namespace HoloToolkit.Sharing.Tests
       lineRenderer.useWorldSpace = false;
       lineRenderer.startWidth = 0.01f;
       lineRenderer.endWidth = 0.05f;
-      lineRenderer.numPositions = 2;
+      lineRenderer.positionCount = 2;
       lineRenderer.SetPosition(0, Vector3.forward * 0.1f);
       var material = new Material(Shader.Find("Diffuse"));
       material.color = colors[this.colorIndex++ % colors.Length];
