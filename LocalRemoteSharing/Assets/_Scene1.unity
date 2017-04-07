@@ -184,6 +184,7 @@ GameObject:
   - component: {fileID: 144293724}
   - component: {fileID: 144293727}
   - component: {fileID: 144293725}
+  - component: {fileID: 144293728}
   m_Layer: 0
   m_Name: SharedObjects
   m_TagString: Untagged
@@ -251,6 +252,37 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   modelParent: {fileID: 705404751}
+--- !u!114 &144293728
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_PrefabParentObject: {fileID: 0}
+  m_PrefabInternal: {fileID: 0}
+  m_GameObject: {fileID: 144293723}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3f2795b3e072e1745a4f8c670d64284f, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  RecognizerStart: 1
+  KeywordsAndResponses:
+  - Keyword: split
+    KeyCode: 0
+    Response:
+      m_PersistentCalls:
+        m_Calls:
+        - m_Target: {fileID: 144293727}
+          m_MethodName: OnSplit
+          m_Mode: 1
+          m_Arguments:
+            m_ObjectArgument: {fileID: 0}
+            m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
+            m_IntArgument: 0
+            m_FloatArgument: 0
+            m_StringArgument: 
+            m_BoolArgument: 0
+          m_CallState: 2
+      m_TypeName: UnityEngine.Events.UnityEvent, UnityEngine, Version=0.0.0.0, Culture=neutral,
+        PublicKeyToken=null
 --- !u!1001 &345734429
 Prefab:
   m_ObjectHideFlags: 0

@@ -16,7 +16,7 @@ namespace HoloToolkit.Sharing
   {
 #if MIKET_CHANGE
     [SyncData]
-    public SyncSpawnedObject ModelObject;
+    public SyncArray<SyncSpawnedObject> ModelObjects;
 #endif
 
     /// <summary>
@@ -50,7 +50,7 @@ namespace HoloToolkit.Sharing
       InstantiatedPrefabs.InitializeLocal(Element);
 
 #if MIKET_CHANGE
-      this.ModelObject.InitializeLocal(Element);
+      this.ModelObjects.InitializeLocal(Element);
 #endif
     }
   }

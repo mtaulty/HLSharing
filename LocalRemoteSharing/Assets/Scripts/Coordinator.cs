@@ -7,6 +7,7 @@ using System;
 using HoloToolkit.Sharing.Tests;
 using HoloToolkit.Sharing.Spawning;
 using HoloToolkit.Unity;
+using HoloToolkit.Unity.InputModule;
 
 #if UNITY_UWP && !UNITY_EDITOR
 using Windows.Networking.Connectivity;
@@ -25,6 +26,11 @@ public class Coordinator : MonoBehaviour
     WaitingForModelPositioning,
     WaitingForWorldAnchorExport,
     WaitingForWorldAnchorImport
+  }
+  public void OnSplit()
+  {
+    this.GetComponent<KeywordManager>().enabled = false;
+    this.model.GetComponent<Collider>().enabled = true;
   }
   void Start()
   {
@@ -191,22 +197,40 @@ public class Coordinator : MonoBehaviour
   {
     StatusTextDisplay.Instance.SetStatusText("room in sync");
 
-    // Allow the child to be moved now that it is positioned in
+    // Allow the model to be moved now that it is positioned in
     // the right place.
-    this.model.AddComponent<UserMoveable>();
+    this.AddMoveabilityToModelObject(this.model);
 
-    var dataModel = SharingStage.Instance.Root.ModelObject;
-    dataModel.GameObject = this.model.gameObject;
-    dataModel.Initialize(this.model.gameObject.name, this.model.transform.GetFullPath());
-    dataModel.Transform.Position.Value = this.model.transform.localPosition;
-    dataModel.Transform.Rotation.Value = this.model.transform.localRotation;
-    dataModel.Transform.Scale.Value = this.model.transform.localScale;
+    // And all of its children are also moveable.
+    var childCount = this.model.transform.childCount;
+
+    for (int i = 0; i < childCount; i++)
+    {
+      var child = this.model.transform.GetChild(i);
+
+      this.AddMoveabilityToModelObject(child.gameObject);
+    }
+    // Switch on the remote head management.
+    this.modelParent.GetComponent<RemoteHeadManager>().enabled = true;
+
+    // Switch on the keyword recognizer listening for 'join' and 'split'
+    this.gameObject.GetComponent<KeywordManager>().StartKeywordRecognizer();
+  }
+  void AddMoveabilityToModelObject(GameObject modelObject)
+  {
+    modelObject.AddComponent<UserMoveable>();
+
+    var dataModel = new SyncSpawnedObject();
+    dataModel.GameObject = modelObject.gameObject;
+    dataModel.Initialize(modelObject.gameObject.name, this.model.transform.GetFullPath());
+    dataModel.Transform.Position.Value = modelObject.transform.localPosition;
+    dataModel.Transform.Rotation.Value = modelObject.transform.localRotation;
+    dataModel.Transform.Scale.Value = modelObject.transform.localScale;
 
     var synchronizer = this.model.EnsureComponent<TransformSynchronizer>();
     synchronizer.TransformDataModel = dataModel.Transform;
 
-    // Switch on the remote head management.
-    this.modelParent.GetComponent<RemoteHeadManager>().enabled = true;
+    SharingStage.Instance.Root.ModelObjects.AddObject(dataModel);
   }
   void GetWiFiNetworkName()
   {
