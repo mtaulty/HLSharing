@@ -1,5 +1,4 @@
-﻿#define DEBUG_EMULATOR_SINGLE_ROOM_ONLY
-using HoloToolkit.Sharing;
+﻿using HoloToolkit.Sharing;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
@@ -17,6 +16,7 @@ using Windows.Networking.Connectivity;
 public class Coordinator : MonoBehaviour
 {
   public GameObject modelParent;
+  public bool ignoreWifiNetworkName;
 
   enum CurrentStatus
   {
@@ -262,25 +262,28 @@ public class Coordinator : MonoBehaviour
   {
     if (this.wifiName == null)
     {
-#if DEBUG_EMULATOR_SINGLE_ROOM_ONLY
-      this.wifiName = DEFAULT_WIFI_NAME;
-#else
 #if UNITY_UWP && !UNITY_EDITOR
-      var interfaces = NetworkInformation.GetConnectionProfiles();
-
-      var wifi = interfaces.Where(
-        i => (i.GetNetworkConnectivityLevel() != NetworkConnectivityLevel.None) &&
-             (i.IsWlanConnectionProfile)).FirstOrDefault();
-
-      if (wifi != null)
-      {
-        this.wifiName = wifi.WlanConnectionProfileDetails.GetConnectedSsid();
-      }
-      else
+      if (this.ignoreWifiNetworkName)
       {
         this.wifiName = DEFAULT_WIFI_NAME;
       }
-#endif
+      else
+      {
+        var interfaces = NetworkInformation.GetConnectionProfiles();
+
+        var wifi = interfaces.Where(
+          i => (i.GetNetworkConnectivityLevel() != NetworkConnectivityLevel.None) &&
+               (i.IsWlanConnectionProfile)).FirstOrDefault();
+
+        if (wifi != null)
+        {
+          this.wifiName = wifi.WlanConnectionProfileDetails.GetConnectedSsid();
+        }
+        else
+        {
+          this.wifiName = DEFAULT_WIFI_NAME;
+        }
+      }
 #endif
     }
   }
