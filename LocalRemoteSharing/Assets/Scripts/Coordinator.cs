@@ -1,4 +1,5 @@
-﻿using HoloToolkit.Sharing;
+﻿#define DEBUG_EMULATOR_SINGLE_ROOM_ONLY
+using HoloToolkit.Sharing;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
@@ -30,7 +31,7 @@ public class Coordinator : MonoBehaviour
   public void OnSplit()
   {
     this.GetComponent<KeywordManager>().enabled = false;
-    this.model.GetComponent<Collider>().enabled = true;
+    this.model.GetComponent<Collider>().enabled = false;
   }
   void Start()
   {
@@ -96,6 +97,11 @@ public class Coordinator : MonoBehaviour
     // Create the model and parent it off this object.
     this.model = Instantiate(bundleDownloader.LoadedPrefab);
     this.model.transform.parent = this.modelParent.transform;
+
+    // Move the world locked parent so that it's in a 'reasonable'
+    // place to start with
+    this.modelParent.transform.SetPositionAndRotation(
+      WORLD_LOCKED_STARTING_POSITION, Quaternion.identity);
 
     Debug.Log(
       string.Format(
@@ -195,47 +201,70 @@ public class Coordinator : MonoBehaviour
   }
   void OnImportOrExportCompleted(bool succeeded)
   {
-    StatusTextDisplay.Instance.SetStatusText("room in sync");
+    StatusTextDisplay.Instance.SetStatusText(
+      string.Format("room import/export {0}", succeeded ? "succeeded" : "failed"));
 
-    // Allow the model to be moved now that it is positioned in
-    // the right place.
-    this.AddMoveabilityToModelObject(this.model);
-
-    // And all of its children are also moveable.
-    var childCount = this.model.transform.childCount;
-
-    for (int i = 0; i < childCount; i++)
+    if (succeeded)
     {
-      var child = this.model.transform.GetChild(i);
+      var isExporter = this.currentStatus == CurrentStatus.WaitingForWorldAnchorExport;
 
-      this.AddMoveabilityToModelObject(child.gameObject);
+      StatusTextDisplay.Instance.SetStatusText("room is now in sync");
+
+      // First, make sure the model itself is set up to be moveable in a trackable way.
+      // NB: We use index 0 for the model itself.
+      this.MakeModelPartMoveableAndTrackable(this.model, 0, isExporter);
+
+      // And all of its children are also moveable.
+      var childCount = this.model.transform.childCount;
+
+      // NB: 1 to N because the have the model in slot 0.
+      for (int i = 1; i <= childCount; i++)
+      {
+        // NB: We add 1 because the model itself is in slot 1.
+        var child = this.model.transform.GetChild(i - 1);
+        this.MakeModelPartMoveableAndTrackable(child.gameObject, i, isExporter);
+      }
+      // Switch on the remote head management.
+      this.modelParent.GetComponent<RemoteHeadManager>().enabled = true;
+
+      // Switch on the keyword recognizer listening for 'join' and 'split'
+      this.gameObject.GetComponent<KeywordManager>().StartKeywordRecognizer();
     }
-    // Switch on the remote head management.
-    this.modelParent.GetComponent<RemoteHeadManager>().enabled = true;
-
-    // Switch on the keyword recognizer listening for 'join' and 'split'
-    this.gameObject.GetComponent<KeywordManager>().StartKeywordRecognizer();
   }
-  void AddMoveabilityToModelObject(GameObject modelObject)
+  SyncSpawnedObject MakeModelPartMoveableAndTrackable(
+    GameObject objectInstance, int indexIntoRootSyncStore, bool isExporter)
   {
-    modelObject.AddComponent<UserMoveable>();
+    SyncSpawnedObject dataModel = null;
 
-    var dataModel = new SyncSpawnedObject();
-    dataModel.GameObject = modelObject.gameObject;
-    dataModel.Initialize(modelObject.gameObject.name, this.model.transform.GetFullPath());
-    dataModel.Transform.Position.Value = modelObject.transform.localPosition;
-    dataModel.Transform.Rotation.Value = modelObject.transform.localRotation;
-    dataModel.Transform.Scale.Value = modelObject.transform.localScale;
+    if (isExporter)
+    {
+      dataModel = new SyncSpawnedObject();
+      dataModel.GameObject = objectInstance; ;
+      dataModel.Initialize(objectInstance.name, objectInstance.transform.GetFullPath());
+      dataModel.Transform.Position.Value = objectInstance.transform.localPosition;
+      dataModel.Transform.Rotation.Value = objectInstance.transform.localRotation;
+      dataModel.Transform.Scale.Value = objectInstance.transform.localScale;
 
-    var synchronizer = this.model.EnsureComponent<TransformSynchronizer>();
+      SharingStage.Instance.Root.ModelObjects.AddObject(dataModel);
+    }
+    else
+    {
+      dataModel = 
+        SharingStage.Instance.Root.ModelObjects.GetDataArray()[indexIntoRootSyncStore];
+    }
+    objectInstance.EnsureComponent<UserMoveable>();
+    var synchronizer = objectInstance.EnsureComponent<TransformSynchronizer>();
     synchronizer.TransformDataModel = dataModel.Transform;
 
-    SharingStage.Instance.Root.ModelObjects.AddObject(dataModel);
+    return (dataModel);
   }
   void GetWiFiNetworkName()
   {
     if (this.wifiName == null)
     {
+#if DEBUG_EMULATOR_SINGLE_ROOM_ONLY
+      this.wifiName = DEFAULT_WIFI_NAME;
+#else
 #if UNITY_UWP && !UNITY_EDITOR
       var interfaces = NetworkInformation.GetConnectionProfiles();
 
@@ -252,6 +281,7 @@ public class Coordinator : MonoBehaviour
         this.wifiName = DEFAULT_WIFI_NAME;
       }
 #endif
+#endif
     }
   }
   void MoveToStatus(CurrentStatus newStatus)
@@ -264,6 +294,8 @@ public class Coordinator : MonoBehaviour
   Room currentRoom;
   CurrentStatus currentStatus;
   DateTime roomApiStartTime;
+
+  static readonly Vector3 WORLD_LOCKED_STARTING_POSITION = new Vector3(0, 0, 3.0f);
   static readonly string DEFAULT_WIFI_NAME = "DefaultWifi";
   static readonly TimeSpan ROOM_API_STABILISATION_TIME = TimeSpan.FromSeconds(3);
 }
