@@ -71,7 +71,7 @@ public class ExportAnchorManager : AnchorManager<ExportAnchorManager>
 
 #if UNITY_WSA && !UNITY_EDITOR
           this.worldAnchor = GetComponent<WorldAnchor>() ?? gameObject.AddComponent<WorldAnchor>();
-          StatusTextDisplay.Instance.SetStatusText("waiting for model lock");
+          StatusTextDisplay.Instance.SetStatusText("waiting for position data");
 #endif
           break;
         case ExportState.WaitingForAnchorLocation:
@@ -79,7 +79,7 @@ public class ExportAnchorManager : AnchorManager<ExportAnchorManager>
           if (this.worldAnchor.isLocated)
           {
             this.currentState = ExportState.ExportingAnchor;
-            StatusTextDisplay.Instance.SetStatusText("exporting lock from device");
+            StatusTextDisplay.Instance.SetStatusText("synchronising...");
             this.ExportWorldAnchor();
           }
 #endif // UNITY_WSA
@@ -130,7 +130,7 @@ public class ExportAnchorManager : AnchorManager<ExportAnchorManager>
   {
     if (successful)
     {
-      StatusTextDisplay.Instance.SetStatusText("lock copied");
+      StatusTextDisplay.Instance.SetStatusText("synchronised");
 
       if (SharingStage.Instance.ShowDetailedLogs)
       {
@@ -140,7 +140,7 @@ public class ExportAnchorManager : AnchorManager<ExportAnchorManager>
     }
     else
     {
-      StatusTextDisplay.Instance.SetStatusText("lock copy failed");
+      StatusTextDisplay.Instance.SetStatusText("sync data copy failed");
 
       Debug.LogError("Anchor Manager: Upload failed " + failureReason);
       currentState = ExportState.Failed;
@@ -156,7 +156,7 @@ public class ExportAnchorManager : AnchorManager<ExportAnchorManager>
     {
       StatusTextDisplay.Instance.SetStatusText(
         string.Format(
-          "copying {0:N2}MB lock to server", (exportingAnchorBytes.Count / (1024 * 1024))));
+          "copying {0:N2}MB data", (exportingAnchorBytes.Count / (1024 * 1024))));
 
       if (SharingStage.Instance.ShowDetailedLogs)
       {

@@ -37,11 +37,11 @@ public class ImportAnchorManager : AnchorManager<ImportAnchorManager>
 
   void Update()
   {
+#if UNITY_WSA && !UNITY_EDITOR
     if (SharingStage.Instance.IsConnected)
     {
       switch (currentState)
       {
-#if UNITY_WSA && !UNITY_EDITOR
         case ImportState.Start:
           ConnectToRoom();
           this.currentState = ImportState.ReadyToImport;
@@ -52,13 +52,13 @@ public class ImportAnchorManager : AnchorManager<ImportAnchorManager>
         case ImportState.DataDownloadedReadyForImport:
           // DataReady is set when the anchor download completes.
           currentState = ImportState.Importing;
-          StatusTextDisplay.Instance.SetStatusText("importing room lock data");
+          StatusTextDisplay.Instance.SetStatusText("importing synchronisation data");
 
           WorldAnchorTransferBatch.ImportAsync(rawAnchorData, ImportComplete);
           break;
-#endif
       }
     }
+#endif
   }
   protected override void AddRoomManagerHandlers()
   {
@@ -83,7 +83,7 @@ public class ImportAnchorManager : AnchorManager<ImportAnchorManager>
     if (successful)
     {
       StatusTextDisplay.Instance.SetStatusText(
-        "room sync data downloaded");
+        "synchronisation data downloaded");
 
       int datasize = request.GetDataSize();
 
@@ -101,7 +101,7 @@ public class ImportAnchorManager : AnchorManager<ImportAnchorManager>
     else
     {
       StatusTextDisplay.Instance.SetStatusText(
-        "retrying room lock request");
+        "retrying synchronisation request");
 
       // If we failed, we can ask for the data again.
       Debug.LogWarning("Anchor Manager: Anchor DL failed " + failureReason);
@@ -116,7 +116,7 @@ public class ImportAnchorManager : AnchorManager<ImportAnchorManager>
 
   void MakeAnchorDataRequest()
   {
-    StatusTextDisplay.Instance.SetStatusText("requesting sync data");
+    StatusTextDisplay.Instance.SetStatusText("requesting data");
 
     if (roomManager.DownloadAnchor(currentRoom, currentRoom.GetAnchorName(0)))
     {
@@ -143,14 +143,14 @@ public class ImportAnchorManager : AnchorManager<ImportAnchorManager>
         }
         this.worldAnchor = anchorBatch.LockObject(first, gameObject);
 
-        StatusTextDisplay.Instance.SetStatusText("room lock imported");
+        StatusTextDisplay.Instance.SetStatusText("synchronised");
       }
 
       base.FireCompleted(true);
     }
     else
     {
-      StatusTextDisplay.Instance.SetStatusText("retrying room lock import");
+      StatusTextDisplay.Instance.SetStatusText("retrying synchronisation");
 
       Debug.LogError("Anchor Manager: Import failed");
 

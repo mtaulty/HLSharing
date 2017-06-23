@@ -26,12 +26,9 @@ public class Coordinator : MonoBehaviour
     WaitingForRoomApiToStabilise,
     WaitingForModelPositioning,
     WaitingForWorldAnchorExport,
-    WaitingForWorldAnchorImport
-  }
-  public void OnSplit()
-  {
-    this.GetComponent<KeywordManager>().enabled = false;
-    this.model.GetComponent<Collider>().enabled = false;
+    WaitingForAnchorOnServer,
+    WaitingForWorldAnchorImport,
+    Running
   }
   void Start()
   {
@@ -42,9 +39,9 @@ public class Coordinator : MonoBehaviour
     switch (this.currentStatus)
     {
       case CurrentStatus.Start:
+
         this.MoveToStatus(CurrentStatus.WaitingForModelToLoad);
 
-        Debug.Log("Coordinator: starting to load model from web server");
         StatusTextDisplay.Instance.SetStatusText("loading model from web server");
 
         this.GetComponent<BundleDownloader>().Downloaded += this.OnModelDownloaded;
@@ -54,11 +51,12 @@ public class Coordinator : MonoBehaviour
 
         if (SharingStage.Instance.IsConnected)
         {
-          Debug.Log("Coordinator: moving to connection stage");
           StatusTextDisplay.Instance.SetStatusText("network connected");
 
           this.GetWiFiNetworkName();
           this.roomApiStartTime = DateTime.Now;
+          StatusTextDisplay.Instance.SetStatusText("looking for other users");
+
           this.MoveToStatus(CurrentStatus.WaitingForRoomApiToStabilise);
         }
         break;
@@ -72,6 +70,16 @@ public class Coordinator : MonoBehaviour
         if (doneWaitingForRoomApi)
         {
           this.CreateOrJoinRoomBasedonWifiNetworkName();
+        }
+        break;
+      case CurrentStatus.WaitingForAnchorOnServer:
+        if (SharingStage.Instance.Root.Model.AnchorEstablished.Value)
+        {
+          var manager = this.modelParent.AddComponent<ImportAnchorManager>() as ICompleted;
+          manager.Completed += this.OnImportOrExportCompleted;
+
+          StatusTextDisplay.Instance.SetStatusText("synchronising...");
+          this.MoveToStatus(CurrentStatus.WaitingForWorldAnchorImport);
         }
         break;
       default:
@@ -97,6 +105,7 @@ public class Coordinator : MonoBehaviour
     // Create the model and parent it off this object.
     this.model = Instantiate(bundleDownloader.LoadedPrefab);
     this.model.transform.parent = this.modelParent.transform;
+    this.model.SetActive(false);
 
     // Move the world locked parent so that it's in a 'reasonable'
     // place to start with
@@ -108,7 +117,7 @@ public class Coordinator : MonoBehaviour
         "Coordinator: waiting for network connection",
         e.DownloadSucceeded ? "succeeded" : "failed or wasn't tried"));
 
-    StatusTextDisplay.Instance.SetStatusText("connecting to room server");
+    StatusTextDisplay.Instance.SetStatusText("connecting to server");
 
     this.MoveToStatus(CurrentStatus.WaitingToConnectToStage);
   }
@@ -155,44 +164,47 @@ public class Coordinator : MonoBehaviour
       }
     }
 
-    if (this.currentRoom == null)
-    {
-      StatusTextDisplay.Instance.SetStatusText("setting up new room");
+    SharingStage.Instance.Root.Model.IsRoomOwner = (this.currentRoom == null);
 
-      this.currentRoom = roomManager.CreateRoom(new XString(wifiName), roomCount + 1, true);
+    if (SharingStage.Instance.Root.Model.IsRoomOwner)
+    {
+      StatusTextDisplay.Instance.SetStatusText("setting up a new room");
+
+      // Note - last false parameter kills the room when people have all left.
+      this.currentRoom = roomManager.CreateRoom(new XString(wifiName), 
+        roomCount + 1, false);
+
       Debug.Log("Coordinator: created a new room for this WiFi network");
 
       this.modelParent.GetComponent<UserMoveable>().enabled = true;
 
       this.MoveToStatus(CurrentStatus.WaitingForModelPositioning);
-      StatusTextDisplay.Instance.SetStatusText("waiting for user to position model");
+      StatusTextDisplay.Instance.SetStatusText("waiting for you to position the model");
 
       Debug.Log("Coordinator: waiting for user to position model");
       this.modelParent.GetComponent<UserMoveable>().Locked += OnPositionLocked;
+
+      this.model.SetActive(true);
     }
     else
     {
-      StatusTextDisplay.Instance.SetStatusText("joining existing room");
+      StatusTextDisplay.Instance.SetStatusText("joining an existing room");
 
       roomManager.JoinRoom(this.currentRoom);
 
-      var manager = this.modelParent.AddComponent<ImportAnchorManager>() as ICompleted;
-      manager.Completed += this.OnImportOrExportCompleted;
+      this.MoveToStatus(CurrentStatus.WaitingForAnchorOnServer);
 
-      this.MoveToStatus(CurrentStatus.WaitingForWorldAnchorImport);
+      StatusTextDisplay.Instance.SetStatusText("waiting for other user to set up room");
 
-      StatusTextDisplay.Instance.SetStatusText("waiting for room sync");
-
-      Debug.Log("Coordinator: joined an existing room for this WiFi network");
+      Debug.Log("Coordinator: joining an existing room for this WiFi network");
     }
-    this.modelParent.SetActive(true);
   }
   void OnPositionLocked(object sender, EventArgs e)
   {
     Debug.Log("Coordinator: position has been locked by user");
     this.modelParent.GetComponent<UserMoveable>().Locked -= OnPositionLocked;
 
-    StatusTextDisplay.Instance.SetStatusText("creating room sync");
+    StatusTextDisplay.Instance.SetStatusText("synchronising...");
 
     var manager = this.modelParent.AddComponent<ExportAnchorManager>() as ICompleted;
     manager.Completed += OnImportOrExportCompleted;
@@ -206,13 +218,17 @@ public class Coordinator : MonoBehaviour
 
     if (succeeded)
     {
-      var isExporter = this.currentStatus == CurrentStatus.WaitingForWorldAnchorExport;
+      SharingStage.Instance.Root.Model.AnchorEstablished.Value = true;
 
-      StatusTextDisplay.Instance.SetStatusText("room is now in sync");
+      if (!SharingStage.Instance.Root.Model.IsRoomOwner)
+      {
+        this.model.SetActive(true);
+      }
+      StatusTextDisplay.Instance.SetStatusText("room synchronised");
 
       // First, make sure the model itself is set up to be moveable in a trackable way.
       // NB: We use index 0 for the model itself.
-      this.MakeModelPartMoveableAndTrackable(this.model, 0, isExporter);
+      this.MakeModelPartMoveableAndTrackable(this.model, 0);
 
       // And all of its children are also moveable.
       var childCount = this.model.transform.childCount;
@@ -222,21 +238,28 @@ public class Coordinator : MonoBehaviour
       {
         // NB: We add 1 because the model itself is in slot 1.
         var child = this.model.transform.GetChild(i - 1);
-        this.MakeModelPartMoveableAndTrackable(child.gameObject, i, isExporter);
+        this.MakeModelPartMoveableAndTrackable(child.gameObject, i);
       }
       // Switch on the remote head management.
       this.modelParent.GetComponent<RemoteHeadManager>().enabled = true;
 
-      // Switch on the keyword recognizer listening for 'join' and 'split'
+      // Switch on the keyword recognizer listening for 'split'
       this.gameObject.GetComponent<KeywordManager>().StartKeywordRecognizer();
+
+      StatusTextDisplay.Instance.SetStatusText("'split' will treat the model pieces separately");
     }
+    else
+    {
+      StatusTextDisplay.Instance.SetStatusText("room sync failed - given up, sorry!");
+    }
+    this.MoveToStatus(CurrentStatus.Running);
   }
   SyncSpawnedObject MakeModelPartMoveableAndTrackable(
-    GameObject objectInstance, int indexIntoRootSyncStore, bool isExporter)
+    GameObject objectInstance, int indexIntoRootSyncStore)
   {
     SyncSpawnedObject dataModel = null;
 
-    if (isExporter)
+    if (SharingStage.Instance.Root.Model.IsRoomOwner)
     {
       dataModel = new SyncSpawnedObject();
       dataModel.GameObject = objectInstance; ;
@@ -261,13 +284,9 @@ public class Coordinator : MonoBehaviour
   void GetWiFiNetworkName()
   {
     if (this.wifiName == null)
-    {
+    { 
 #if UNITY_UWP && !UNITY_EDITOR
-      if (this.ignoreWifiNetworkName)
-      {
-        this.wifiName = DEFAULT_WIFI_NAME;
-      }
-      else
+      if (!this.ignoreWifiNetworkName)
       {
         var interfaces = NetworkInformation.GetConnectionProfiles();
 
@@ -279,12 +298,25 @@ public class Coordinator : MonoBehaviour
         {
           this.wifiName = wifi.WlanConnectionProfileDetails.GetConnectedSsid();
         }
-        else
-        {
-          this.wifiName = DEFAULT_WIFI_NAME;
-        }
       }
 #endif
+      if (String.IsNullOrEmpty(this.wifiName))
+      {
+        this.wifiName = DEFAULT_WIFI_NAME;
+      }
+    }
+  }
+  public void OnSplit()
+  {
+    if (this.currentStatus == CurrentStatus.Running)
+    {
+      this.GetComponent<KeywordManager>().enabled = false;
+
+      // Take off the collider on the top level object, leaving its children directly
+      // exposed to 'collisions'.
+      this.model.GetComponent<Collider>().enabled = false;
+
+      StatusTextDisplay.Instance.SetStatusText(string.Empty);
     }
   }
   void MoveToStatus(CurrentStatus newStatus)

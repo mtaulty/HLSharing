@@ -17,6 +17,10 @@ namespace HoloToolkit.Sharing
 #if MIKET_CHANGE
     [SyncData]
     public SyncArray<SyncSpawnedObject> ModelObjects;
+
+    [SyncData]
+    public GlobalDataModel Model = new GlobalDataModel("Model");
+
 #endif
 
     /// <summary>
@@ -51,6 +55,7 @@ namespace HoloToolkit.Sharing
 
 #if MIKET_CHANGE
       this.ModelObjects.InitializeLocal(Element);
+      this.Model.InitializeLocal(Element);
 #endif
     }
   }
