@@ -1,34 +1,22 @@
 ﻿using HoloToolkit.Sharing.SyncModel;
-using System.Collections;
-using System.Collections.Generic;
-using UnityEngine;
-
-//[SyncDataClass]
-//public class SynchronisableTransform : SyncObject
-//{
-//  [SyncData]
-//  public SyncTransform Transform = new SyncTransform("Transform");
-//}
 
 public class GlobalDataModel : SyncObject
 {
   public GlobalDataModel(string field) : base(field)
   {
   }
-  // Note: this flag is not intended to be synchronised
+  // Note: this flag is not intended to be synchronised across device like the
+  // other members are. It's just a piece of global state as it'll default to
+  // false on all devices but the room owner (I hope).
   public bool IsRoomOwner { get; set; }
 
   [SyncData]
   public SyncBool AnchorEstablished = new SyncBool("AnchorEstablished");
 
-#if zero
   [SyncData]
-  public SyncTransform Transform = new SyncTransform("Transform");
+  public SyncTransform ParentTransform = new SyncTransform("Transform");
 
   [SyncData]
-  public SyncInteger CurrentState = new SyncInteger("CurrentState");
-
-  [SyncData]
-  public SyncArray<SynchronisableTransform> ViewTransforms = new SyncArray<SynchronisableTransform>("ViewTransforms");
-#endif
+  public SyncArray<SynchronisableTransform> ChildTransforms = 
+    new SyncArray<SynchronisableTransform>("ChildTransforms");
 }

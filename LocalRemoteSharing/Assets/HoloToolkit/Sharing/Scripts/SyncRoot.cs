@@ -56,6 +56,7 @@ namespace HoloToolkit.Sharing
 #if MIKET_CHANGE
       this.ModelObjects.InitializeLocal(Element);
       this.Model.InitializeLocal(Element);
+      this.Model.ChildTransforms.InitializeLocal(Element);
 #endif
     }
   }

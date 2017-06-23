@@ -1,13 +1,11 @@
 ﻿using HoloToolkit.Sharing;
-using System.Collections;
-using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
 using System;
 using HoloToolkit.Sharing.Tests;
-using HoloToolkit.Sharing.Spawning;
 using HoloToolkit.Unity;
 using HoloToolkit.Unity.InputModule;
+using HoloToolkit.Sharing.SyncModel;
 
 #if UNITY_UWP && !UNITY_EDITOR
 using Windows.Networking.Connectivity;
@@ -29,6 +27,19 @@ public class Coordinator : MonoBehaviour
     WaitingForAnchorOnServer,
     WaitingForWorldAnchorImport,
     Running
+  }
+  public void OnSplit()
+  {
+    if (this.currentStatus == CurrentStatus.Running)
+    {
+      this.GetComponent<KeywordManager>().enabled = false;
+
+      // Take off the collider on the top level object, leaving its children directly
+      // exposed to 'collisions'.
+      this.model.GetComponent<Collider>().enabled = false;
+
+      StatusTextDisplay.Instance.SetStatusText(string.Empty);
+    }
   }
   void Start()
   {
@@ -213,6 +224,8 @@ public class Coordinator : MonoBehaviour
   }
   void OnImportOrExportCompleted(bool succeeded)
   {
+    var dataModel = SharingStage.Instance.Root.Model;
+
     StatusTextDisplay.Instance.SetStatusText(
       string.Format("room import/export {0}", succeeded ? "succeeded" : "failed"));
 
@@ -220,33 +233,54 @@ public class Coordinator : MonoBehaviour
     {
       SharingStage.Instance.Root.Model.AnchorEstablished.Value = true;
 
-      if (!SharingStage.Instance.Root.Model.IsRoomOwner)
+      if (!dataModel.IsRoomOwner)
       {
+        // Time to switch on the model if we aren't the user who positioned it
+        // originally.
         this.model.SetActive(true);
       }
       StatusTextDisplay.Instance.SetStatusText("room synchronised");
 
       // First, make sure the model itself is set up to be moveable in a trackable way.
-      // NB: We use index 0 for the model itself.
-      this.MakeModelPartMoveableAndTrackable(this.model, 0);
+      // For the room owner, we will copy across the current transform values whereas
+      // for non-room owners we'll just let them sync.
+      this.SetUpSyncTransform(this.model,
+        SharingStage.Instance.Root.Model.ParentTransform, dataModel.IsRoomOwner);
 
       // And all of its children are also moveable.
       var childCount = this.model.transform.childCount;
 
-      // NB: 1 to N because the have the model in slot 0.
-      for (int i = 1; i <= childCount; i++)
+      for (int i = 0; i < childCount; i++)
       {
-        // NB: We add 1 because the model itself is in slot 1.
-        var child = this.model.transform.GetChild(i - 1);
-        this.MakeModelPartMoveableAndTrackable(child.gameObject, i);
+        var syncTransform =
+          dataModel.IsRoomOwner ? 
+            new SynchronisableTransform() : dataModel.ChildTransforms.GetDataArray()[i];
+
+        var child = this.model.transform.GetChild(i);
+
+        this.SetUpSyncTransform(
+          child.gameObject, 
+          syncTransform.Transform,
+          dataModel.IsRoomOwner);
+
+        if (dataModel.IsRoomOwner)
+        {
+          dataModel.ChildTransforms.AddObject(syncTransform);
+        }
       }
       // Switch on the remote head management.
       this.modelParent.GetComponent<RemoteHeadManager>().enabled = true;
 
-      // Switch on the keyword recognizer listening for 'split'
-      this.gameObject.GetComponent<KeywordManager>().StartKeywordRecognizer();
+      // Only switching this on for the room owner at the moment to avoid
+      // having to add more sync'd data model.
+      if (dataModel.IsRoomOwner)
+      {
+        // Switch on the keyword recognizer listening for 'split'
+        this.gameObject.GetComponent<KeywordManager>().StartKeywordRecognizer();
 
-      StatusTextDisplay.Instance.SetStatusText("'split' will treat the model pieces separately");
+        StatusTextDisplay.Instance.SetStatusText(
+          "'split' will treat the model pieces separately");
+      }
     }
     else
     {
@@ -254,32 +288,23 @@ public class Coordinator : MonoBehaviour
     }
     this.MoveToStatus(CurrentStatus.Running);
   }
-  SyncSpawnedObject MakeModelPartMoveableAndTrackable(
-    GameObject objectInstance, int indexIntoRootSyncStore)
+  void SetUpSyncTransform(GameObject gameObject, SyncTransform syncTransform,
+    bool initialiseValues)
   {
-    SyncSpawnedObject dataModel = null;
-
-    if (SharingStage.Instance.Root.Model.IsRoomOwner)
+    // Initialise scale, position, rotation (NB: scale doesn't change in this
+    // code base right now).
+    if (initialiseValues)
     {
-      dataModel = new SyncSpawnedObject();
-      dataModel.GameObject = objectInstance; ;
-      dataModel.Initialize(objectInstance.name, objectInstance.transform.GetFullPath());
-      dataModel.Transform.Position.Value = objectInstance.transform.localPosition;
-      dataModel.Transform.Rotation.Value = objectInstance.transform.localRotation;
-      dataModel.Transform.Scale.Value = objectInstance.transform.localScale;
-
-      SharingStage.Instance.Root.ModelObjects.AddObject(dataModel);
+      syncTransform.Scale.Value = gameObject.transform.localScale;
+      syncTransform.Position.Value = gameObject.transform.localPosition;
+      syncTransform.Rotation.Value = gameObject.transform.localRotation;
     }
-    else
-    {
-      dataModel = 
-        SharingStage.Instance.Root.ModelObjects.GetDataArray()[indexIntoRootSyncStore];
-    }
-    objectInstance.EnsureComponent<UserMoveable>();
-    var synchronizer = objectInstance.EnsureComponent<TransformSynchronizer>();
-    synchronizer.TransformDataModel = dataModel.Transform;
+    // Ensure that the object is moveable
+    gameObject.EnsureComponent<UserMoveable>();
 
-    return (dataModel);
+    // Ensure that the transforms synchronize themselves.
+    var synchronizer = gameObject.EnsureComponent<TransformSynchronizer>();
+    synchronizer.TransformDataModel = syncTransform;
   }
   void GetWiFiNetworkName()
   {
@@ -304,19 +329,6 @@ public class Coordinator : MonoBehaviour
       {
         this.wifiName = DEFAULT_WIFI_NAME;
       }
-    }
-  }
-  public void OnSplit()
-  {
-    if (this.currentStatus == CurrentStatus.Running)
-    {
-      this.GetComponent<KeywordManager>().enabled = false;
-
-      // Take off the collider on the top level object, leaving its children directly
-      // exposed to 'collisions'.
-      this.model.GetComponent<Collider>().enabled = false;
-
-      StatusTextDisplay.Instance.SetStatusText(string.Empty);
     }
   }
   void MoveToStatus(CurrentStatus newStatus)
