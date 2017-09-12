@@ -233,9 +233,10 @@ namespace HoloToolkit.Sharing.Tests
     /// <returns></returns>
     private GameObject CreateRemoteHead()
     {
-      GameObject newHeadObj = GameObject.CreatePrimitive(PrimitiveType.Cube);
+#if MIKET_CHANGE
+      GameObject newHeadObj = Instantiate(this.remoteHeadPrefab);
       newHeadObj.transform.parent = gameObject.transform;
-      newHeadObj.transform.localScale = Vector3.one * 0.2f;
+#endif
 
 #if MIKET_CHANGE
       this.AddLineRenderer(newHeadObj);
