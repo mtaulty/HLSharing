@@ -195,7 +195,7 @@ namespace HoloToolkit.Sharing.VoiceChat
                     testObj.transform.parent = transform;
                     testSource = testObj.AddComponent<AudioSource>();
                 }
-                //testSource.PlayClip(TestClip, true);
+                testSource.PlayClip(TestClip, true);
                 SaveTestClip = false;
             }
             #endregion
@@ -267,12 +267,11 @@ namespace HoloToolkit.Sharing.VoiceChat
                             cameraPosRelativeToGlobalAnchor = MathUtils.TransformPointFromTo(
                                 null,
                                 GlobalAnchorTransform,
-                                Camera.main.transform.position);
+                                CameraCache.Main.transform.position);
                             cameraDirectionRelativeToGlobalAnchor = MathUtils.TransformDirectionFromTo(
                                 null,
                                 GlobalAnchorTransform,
-                                Camera.main.transform.position);
-
+                                CameraCache.Main.transform.position);
                         }
 
                         cameraPosRelativeToGlobalAnchor.Normalize();

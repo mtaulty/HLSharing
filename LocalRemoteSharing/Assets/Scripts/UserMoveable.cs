@@ -30,7 +30,7 @@ public class UserMoveable : MonoBehaviour, IManipulationHandler, IInputClickHand
   public void OnLock()
   {
     // We're done.
-    this.gameObject.GetComponent<KeywordManager>().StopKeywordRecognizer();
+    this.gameObject.GetComponent<SpeechInputSource>().StopKeywordRecognizer();
 
     if (this.Locked != null)
     {

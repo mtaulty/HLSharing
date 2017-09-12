@@ -2,10 +2,11 @@
 using System.Linq;
 using UnityEngine;
 using System;
-using HoloToolkit.Sharing.Tests;
+//using HoloToolkit.Sharing.Tests;
 using HoloToolkit.Unity;
 using HoloToolkit.Unity.InputModule;
 using HoloToolkit.Sharing.SyncModel;
+using HoloToolkit.Sharing.Tests;
 
 #if UNITY_UWP && !UNITY_EDITOR
 using Windows.Networking.Connectivity;
@@ -32,7 +33,7 @@ public class Coordinator : MonoBehaviour
   {
     if (this.currentStatus == CurrentStatus.Running)
     {
-      this.GetComponent<KeywordManager>().enabled = false;
+      this.GetComponent<SpeechInputSource>().enabled = false;
 
       // Take off the collider on the top level object, leaving its children directly
       // exposed to 'collisions'.
@@ -276,7 +277,7 @@ public class Coordinator : MonoBehaviour
       if (dataModel.IsRoomOwner)
       {
         // Switch on the keyword recognizer listening for 'split'
-        this.gameObject.GetComponent<KeywordManager>().StartKeywordRecognizer();
+        this.gameObject.GetComponent<SpeechInputSource>().StartKeywordRecognizer();
 
         StatusTextDisplay.Instance.SetStatusText(
           "'split' will treat the model pieces separately");

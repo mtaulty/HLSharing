@@ -14,7 +14,7 @@ namespace HoloToolkit.Sharing.SyncModel
   /// </summary>
 #if MIKET_CHANGE
   public class SyncBool : SyncPrimitive, INotifyPropertyChanged
-#else    
+#else
     public class SyncBool : SyncPrimitive
 #endif
   {
@@ -25,12 +25,14 @@ namespace HoloToolkit.Sharing.SyncModel
     public event PropertyChangedEventHandler PropertyChanged;
 #endif
 
+
 #if UNITY_EDITOR
     public override object RawValue
     {
       get { return value; }
     }
 #endif
+
     public bool Value
     {
       get { return value; }
@@ -54,16 +56,6 @@ namespace HoloToolkit.Sharing.SyncModel
         }
       }
     }
-#if MIKET_CHANGE
-    void FirePropertyChanged(string property = "Value")
-    {
-      var handlers = this.PropertyChanged;
-      if (handlers != null)
-      {
-        handlers(this, new PropertyChangedEventArgs(property));
-      }
-    }
-#endif
 
     public SyncBool(string field) : base(field) { }
 
@@ -94,5 +86,15 @@ namespace HoloToolkit.Sharing.SyncModel
       FirePropertyChanged();
 #endif
     }
+#if MIKET_CHANGE
+    void FirePropertyChanged(string property = "Value")
+    {
+      var handlers = this.PropertyChanged;
+      if (handlers != null)
+      {
+        handlers(this, new PropertyChangedEventArgs(property));
+      }
+    }
+#endif
   }
 }

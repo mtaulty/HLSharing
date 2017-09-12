@@ -14,6 +14,7 @@ namespace HoloToolkit.Sharing
   /// </summary>
   public class SyncRoot : SyncObject
   {
+
 #if MIKET_CHANGE
     [SyncData]
     public SyncArray<SyncSpawnedObject> ModelObjects;
